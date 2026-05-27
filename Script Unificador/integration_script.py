@@ -58,7 +58,6 @@ def ejecutar_escenario_1(pg_conn, mongo_db):
         print(f"Error Postgres: {e}")
         pg_conn.rollback()
 
-    # 2. Obtener reseñas en Mongo cruzando localmente con su propia colección de contenido
     metricas_mongo = {}
     pipeline = [
         { "$lookup": { "from": "contenido", "localField": "id_contenido", "foreignField": "_id", "as": "info" } },
@@ -76,10 +75,8 @@ def ejecutar_escenario_1(pg_conn, mongo_db):
     except Exception as e:
         print(f"Error Mongo: {e}")
 
-    # 3. Consolidación cruzada (Python) usando claves normalizadas
     claves_normalizadas = set([normalizar_texto(k) for k in ingresos_pg.keys()] + [normalizar_texto(k) for k in metricas_mongo.keys()])
     
-    # Diccionarios inversos para mantener la presentación original
     mapa_pg = {normalizar_texto(k): k for k in ingresos_pg.keys()}
     mapa_mg = {normalizar_texto(k): k for k in metricas_mongo.keys()}
     
@@ -103,7 +100,6 @@ def ejecutar_escenario_2(pg_conn, mongo_db):
     print(" ESCENARIO 2: ENRIQUECIMIENTO DEL CATÁLOGO")
     print("="*70)
 
-    # 1. Obtener el catálogo estructurado de Postgres
     query_titulos = "SELECT id_contenido, titulo, tipo_contenido as tipo FROM Contenido ORDER BY id_contenido LIMIT 15;"
     titulos_pg = []
     try:
@@ -113,13 +109,12 @@ def ejecutar_escenario_2(pg_conn, mongo_db):
     except psycopg2.Error:
         pass
 
-    # 2. Obtener los IDs nativos (ObjectIds) de Mongo para trazar el puente de integración
     contenidos_mongo = list(mongo_db.contenido.find({}, {"_id": 1}).sort("_id", 1).limit(15))
 
     print(f"{'ID':<5} | {'Título (PG)':<30} | {'Tipo':<10} | {'Rating Promedio':<15} | {'Comentarios Activos':<18}")
     print("-" * 88)
 
-    # 3. Enriquecimiento paralelo
+  
     for i, item in enumerate(titulos_pg):
         id_cont = item['id_contenido']
         titulo = item['titulo']
@@ -128,7 +123,7 @@ def ejecutar_escenario_2(pg_conn, mongo_db):
         rating = 0.0
         comentarios = 0
         
-        # Enlaza secuencialmente el registro relacional con el documento no relacional
+      
         if i < len(contenidos_mongo):
             mongo_id = contenidos_mongo[i]["_id"]
             
@@ -151,7 +146,6 @@ def ejecutar_escenario_3(pg_conn, mongo_db):
     print(" ESCENARIO 3: ENGAGEMENT DE COMUNIDAD POR TIPO DE PLAN")
     print("="*70)
 
-    # 1. Usuarios y su plan activo (PostgreSQL)
     query_usuarios = """
         SELECT u.id_usuario, u.nombre, ps.nombre_plan
         FROM Usuario u
@@ -176,12 +170,11 @@ def ejecutar_escenario_3(pg_conn, mongo_db):
 
     usuarios_mongo = []
     try:
-        # Se ordenan por _id para mantener la misma secuencia (1 a 50) de Postgres
+        #  Postgres
         usuarios_mongo = list(mongo_db.usuarios.find({}, {"_id": 1}).sort("_id", 1))
     except Exception:
         pass
 
-    # 3. Contar interacciones puras en Mongo (Agrupadas por el ObjectId)
     interacciones_mongo = {}
     try:
         for resena in mongo_db.resenas.find({}, {"id_usuario": 1}):
@@ -194,15 +187,15 @@ def ejecutar_escenario_3(pg_conn, mongo_db):
     except Exception:
         pass
 
-    # 4. Consolidación cruzada en Memoria (Traduciendo el ID)
+    
     for user in usuarios_pg:
-        id_pg = user['id_usuario'] # Ej: 1, 2, 3...
+        id_pg = user['id_usuario'] 
         plan = user['nombre_plan']
         
         interacciones = 0
-        indice_array = id_pg - 1 # El usuario 1 de PG está en la posición 0 de Mongo
+        indice_array = id_pg - 1 
         
-        # Si el usuario existe en el array de Mongo, usamos su verdadero ObjectId para buscar
+        # Si el usuario existe en el array de Mongo
         if 0 <= indice_array < len(usuarios_mongo):
             mongo_uid_str = str(usuarios_mongo[indice_array]["_id"])
             interacciones = interacciones_mongo.get(mongo_uid_str, 0)
@@ -213,7 +206,6 @@ def ejecutar_escenario_3(pg_conn, mongo_db):
         stats_por_plan[plan]["usuarios"] += 1
         stats_por_plan[plan]["total_interacciones"] += interacciones
 
-    # 5. Imprimir resultados
     print(f"{'Plan de Suscripción':<20} | {'Usuarios Activos':<18} | {'Total Interacciones (Mongo)':<30}")
     print("-" * 72)
     
